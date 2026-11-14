@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Симулятор Уважения Пчёлок 3D</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #87CEEB; /* Небо */
+            font-family: 'Arial', sans-serif;
+            touch-action: none; /* Отключаем скролл страницы при игре */
+            user-select: none;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100vh;
+        }
+
+        /* Интерфейс поверх игры */
+        #ui-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }
+
+        .top-panel {
+            text-align: center;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            padding-top: 20px;
+            width: 100%;
+        }
+
+        h1 { margin: 0; font-size: 20px; color: yellow; }
+        
+        /* Шкала Гнева */
+        #anger-container {
+            width: 80%;
+            max-width: 300px;
+            height: 25px;
+            background: rgba(0,0,0,0.6);
+            border-radius: 15px;
+            margin: 10px auto;
+            border: 2px solid white;
+            overflow: hidden;
+            position: relative;
+        }
+        #anger-bar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(to right, #00ff00, #ffff00, #ff0000);
+            transition: width 0.1s linear;
+        }
+        #status-text {
+            font-size: 16px;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+
+        /* Летающая кнопка УВАЖАЮ */
+        #btn-respect {
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            background: radial-gradient(circle, #FFD700, #FFA500);
+            border: 4px solid black;
+            border-radius: 50%;
+            color: black;
+            font-weight: 900;
+            font-size: 14px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            cursor: pointer;
+            pointer-events: auto;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+            z-index: 20;
+            transform: translate(-50%, -50%); /* Центрирование по координатам */
+            animation: float-btn 2s ease-in-out infinite alternate;
+            display: none; /* Скрыта до старта */
+        }
+
+        @keyframes float-btn {
+            from { transform: translate(-50%, -50%) scale(1); }
+            to { transform: translate(-50%, -50%) scale(1.1); }
+        }
+
+        /* Нижняя панель управления */
+        .bottom-controls {
+            padding-bottom: 30px;
+            pointer-events: auto;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        button.control-btn {
+            padding: 15px 25px;
+            font-size: 18px;
+            font-weight: bold;
+            border: 3px solid black;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 5px 0 black;
+        }
+
+        #btn-disrespect {
+            background-color: #ff4444;
+            color: white;
+        }
+        #btn-disrespect:active {
+            transform: translateY(5px);
+            box-shadow: none;
+        }
+
+        /* Эффекты Катастрофы */
+        #disaster-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: red;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 5;
+            mix-blend-mode: multiply;
+        }
+
+        .shake-effect {
+            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both infinite;
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-2px, 0, 0); }
+            20%, 80% { transform: translate3d(4px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-6px, 0, 0); }
+            40%, 60% { transform: translate3d(6px, 0, 0); }
+        }
+
+        #disaster-msg {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 40px;
+            color: white;
+            font-weight: 900;
+            text-shadow: 4px 4px 0 black;
+            display: none;
+            z-index: 100;
+            text-align: center;
+            width: 90%;
+        }
+
+        /* Стартовый экран */
+        #start-screen {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 200;
+            text-align: center;
+            padding: 20px;
+        }
+        #start-btn {
+            background: limegreen;
+            color: black;
+            font-size: 24px;
+            padding: 15px 40px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            margin-top: 20px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Стартовый экран -->
+    <div id="start-screen">
+        <h1 style="font-size: 30px; color: yellow;">СИМУЛЯТОР УВАЖЕНИЯ ПЧЁЛОК</h1>
+        <p>Лови золотую кнопку «УВАЖАЮ»!</p>
+        <p>Если не будешь ловить -- будет КАТАСТРОФА.</p>
+        <button id="start-btn">▶ НАЧАТЬ ИГРУ</button>
+        <p style="font-size: 12px; color: #aaa; margin-top: 10px;">🎵 Играет: "Кто пчелок уважает..." (MP3)</p>
+    </div>
+
+    <!-- UI Layers -->
+    <div id="disaster-overlay"></div>
+    <div id="disaster-msg">КАТАСТРОФА!<br>СБИТИЕ АВТОБУСА!</div>
+
+    <div id="ui-layer">
+        <div class="top-panel">
+            <h1>УРОВЕНЬ ГНЕВА ПЧЁЛОК</h1>
+            <div id="anger-container">
+                <div id="anger-bar"></div>
+            </div>
+            <div id="status-text">Пчёлки спокойны...</div>
+        </div>
+        
+        <!-- Динамическая кнопка -->
+        <div id="btn-respect">УВАЖАЮ<br>🐝</div>
+
+        <div class="bottom-controls">
+            <button id="btn-disrespect" class="control-btn">💀 НЕ УВАЖАТЬ</button>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+    // --- КОНФИГУРАЦИЯ МУЗЫКИ ---
+    const SONG_URL = "https://mp3tourl.com/audio/1794661914161-e3549991-cd8e-4bb9-8d85-65dc8b7e979b.mp3"; 
+    
+    // --- ЭЛЕМЕНТЫ DOM ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const btnRespect = document.getElementById('btn-respect');
+    const btnDisrespect = document.getElementById('btn-disrespect');
+    const angerBar = document.getElementById('anger-bar');
+    const statusText = document.getElementById('status-text');
+    const disasterOverlay = document.getElementById('disaster-overlay');
+    const disasterMsg = document.getElementById('disaster-msg');
+    const startScreen = document.getElementById('start-screen');
+    const startBtn = document.getElementById('start-btn');
+    const body = document.body;
+
+    // --- СОСТОЯНИЕ ИГРЫ ---
+    let gameActive = false;
+    let angerLevel = 0; // 0 - 100
+    let isDisaster = false;
+    let lastTime = 0;
+    let beeColor = '#FFD700'; // Желтый
+    
+    // Параметры пчел
+    const bees = [];
+    const numBees = 15;
+
+    // Аудио объекты
+    let bgMusicPlayer = null; // Для реального mp3
+    let audioCtx = null;      // Для синтезатора (fallback)
+    let musicInterval = null; // Интервал синтеза
+
+    // --- ИНИЦИАЛИЗАЦИЯ CANVAS ---
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // --- СОЗДАНИЕ ПЧЁЛ (2D имитация 3D) ---
+    function initBees() {
+        bees.length = 0;
+        for(let i=0; i<numBees; i++) {
+            bees.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                vx: (Math.random() - 0.5) * 2,
+                vy: (Math.random() - 0.5) * 2,
+                size: 15 + Math.random() * 10,
+                angle: Math.random() * Math.PI * 2,
+                wingPhase: Math.random() * Math.PI * 2
+            });
+        }
+    }
+
+    // --- РИСОВАНИЕ ПЧЁЛ ---
+    function drawBee(bee, color) {
+        ctx.save();
+        ctx.translate(bee.x, bee.y);
+        ctx.rotate(bee.angle);
+
+        // Тело (эллипс для объема)
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, bee.size, bee.size * 0.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Полоски
+        ctx.fillStyle = 'black';
+        ctx.fillRect(-bee.size*0.2, -bee.size*0.6, bee.size*0.1, bee.size*1.2);
+        ctx.fillRect(bee.size*0.2, -bee.size*0.6, bee.size*0.1, bee.size*1.2);
+
+        // Голова
+        ctx.beginPath();
+        ctx.arc(bee.size, 0, bee.size * 0.4, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.stroke();
+
+        // Глаза
+        ctx.fillStyle = 'white';
+        ctx.beginPath(); ctx.arc(bee.size + 2, -3, 2, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(bee.size + 2, 3, 2, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'black';
+        ctx.beginPath(); ctx.arc(bee.size + 2, -3, 1, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(bee.size + 2, 3, 1, 0, Math.PI*2); ctx.fill();
+
+        // Крылья (анимация)
+        bee.wingPhase += 0.5;
+        const wingY = Math.sin(bee.wingPhase) * 5;
+        
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.beginPath();
+        ctx.ellipse(0, -bee.size*0.5 + wingY, bee.size*0.8, bee.size*0.3, -0.2, 0, Math.PI*2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.ellipse(0, bee.size*0.5 - wingY, bee.size*0.8, bee.size*0.3, 0.2, 0, Math.PI*2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.restore();
+    }
+
+    // --- АУДИО СИСТЕМА ---
+
+    // 1. Попытка загрузить реальный MP3
+    function setupRealMusic() {
+        bgMusicPlayer = new Audio(SONG_URL);
+        bgMusicPlayer.loop = true;
+        bgMusicPlayer.volume = 0.8;
+        
+        // Проверка ошибки загрузки
+        bgMusicPlayer.onerror = () => {
+            console.warn("Файл song.mp3 не найден или ошибка сети. Используем синтезатор.");
+            bgMusicPlayer = null; // Обнуляем, чтобы использовать fallback
+            startSynthMusic();
+        };
+    }
+
+    // 2. Запуск реального MP3
+    function playRealMusic() {
+        if (bgMusicPlayer) {
+            bgMusicPlayer.play().catch(e => {
+                console.error("Ошибка воспроизведения:", e);
+                // Если браузер блокирует автоплей, пробуем снова после первого клика пользователя
+                startSynthMusic(); 
+            });
+        } else {
+            startSynthMusic();
+        }
+    }
+
+    function pauseRealMusic() {
+        if (bgMusicPlayer) bgMusicPlayer.pause();
+    }
+    
+    function resumeRealMusic() {
+        if (bgMusicPlayer && !isDisaster) bgMusicPlayer.play();
+    }
+
+    // 3. Синтезированный запасной вариант (если нет файла)
+    const melodyNotes = [
+        392, 392, 440, 392, 349, 329, // Кто пчелок уважает
+        392, 392, 440, 392, 349, 329, // Кто к ним не пристает
+        329, 329, 349, 329, 293, 261, // Того они не жалят
+        261, 293, 329, 349, 392, 523  // Тому приносят мед
+    ];
+    let noteIndex = 0;
+
+    function initAudioContext() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+    }
+
+    function playNote(freq, duration = 0.4, type = 'triangle') {
+        if (!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        
+        osc.type = type;
+        osc.frequency.value = freq;
+        
+        osc.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        
+        osc.start();
+        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        osc.stop(audioCtx.currentTime + duration);
+    }
+
+    function startSynthMusic() {
+        if (musicInterval) clearInterval(musicInterval);
+        initAudioContext();
+        
+        musicInterval = setInterval(() => {
+            if (!gameActive || isDisaster) return; 
+            
+            const freq = melodyNotes[noteIndex];
+            playNote(freq, 0.4);
+            playNote(freq / 2, 0.4, 'sine'); // Бас
+            
+            noteIndex++;
+            if (noteIndex >= melodyNotes.length) noteIndex = 0;
+        }, 500);
+    }
+
+    function stopSynthMusic() {
+        if (musicInterval) clearInterval(musicInterval);
+    }
+
+    // --- ЛОГИКА ИГРЫ ---
+
+    function spawnRespectButton() {
+        if (isDisaster) return;
+        
+        const x = 50 + Math.random() * (window.innerWidth - 100);
+        const y = 100 + Math.random() * (window.innerHeight - 200);
+        
+        btnRespect.style.left = x + 'px';
+        btnRespect.style.top = y + 'px';
+        btnRespect.style.display = 'flex';
+        
+        setTimeout(() => {
+            if (btnRespect.style.display !== 'none' && !isDisaster) {
+                angerLevel += 20; 
+                hideRespectButton();
+                spawnRespectButton(); 
+            }
+        }, 3000);
+    }
+
+    function hideRespectButton() {
+        btnRespect.style.display = 'none';
+    }
+
+    function handleRespectClick(e) {
+        e.preventDefault(); 
+        if (!gameActive || isDisaster) return;
+
+        angerLevel = Math.max(0, angerLevel - 30);
+        hideRespectButton();
+        
+        // Звук успеха (короткий бип)
+        if(audioCtx) playNote(800, 0.1, 'square');
+
+        setTimeout(spawnRespectButton, 500 + Math.random() * 1000);
+    }
+
+    function handleDisrespectClick() {
+        if (!gameActive || isDisaster) return;
+        
+        angerLevel += 25;
+        if(audioCtx) playNote(100, 0.3, 'sawtooth'); 
+        
+        btnDisrespect.style.transform = "scale(0.9)";
+        setTimeout(() => btnDisrespect.style.transform = "scale(1)", 100);
+    }
+
+    function triggerDisaster() {
+        isDisaster = true;
+        hideRespectButton();
+        
+        disasterOverlay.style.opacity = 0.6;
+        body.classList.add('shake-effect');
+        
+        const disasters = ["СБИТИЕ АВТОБУСА!", "СЕРДЕЧНЫЙ ПРИСТУП!", "НАШЕСТВИЕ ШЕРШНЕЙ!", "ПАДЕНИЕ САМОЛЕТА!"];
+        disasterMsg.innerHTML = `<span style="color:red">${disasters[Math.floor(Math.random() * disasters.length)]}</span>`;
+        disasterMsg.style.display = 'block';
+        
+        // Приглушаем музыку во время катастрофы
+        pauseRealMusic();
+        stopSynthMusic();
+
+        setTimeout(endDisaster, 4000);
+    }
+
+    function endDisaster() {
+        isDisaster = false;
+        angerLevel = 0; 
+        
+        disasterOverlay.style.opacity = 0;
+        body.classList.remove('shake-effect');
+        disasterMsg.style.display = 'none';
+        
+        // Возобновляем музыку
+        resumeRealMusic();
+        if(!bgMusicPlayer) startSynthMusic(); // Если mp3 нет, включаем синтезатор
+        
+        spawnRespectButton();
+    }
+
+    function updateGame(timestamp) {
+        if (!gameActive) return;
+
+        const deltaTime = timestamp - lastTime;
+        lastTime = timestamp;
+
+        if (!isDisaster) {
+            angerLevel += 0.05; 
+            if (angerLevel > 100) angerLevel = 100;
+        }
+
+        if (angerLevel >= 100 && !isDisaster) {
+            triggerDisaster();
+        }
+
+        if (angerLevel > 50) {
+            const r = 255;
+            const g = Math.max(0, 215 - ((angerLevel - 50) * 4)); 
+            const b = 0;
+            beeColor = `rgb(${r},${g},${b})`;
+        } else {
+            beeColor = '#FFD700';
+        }
+
+        bees.forEach(bee => {
+            const speedMult = isDisaster ? 3 : (1 + angerLevel/100);
+            
+            bee.x += bee.vx * speedMult;
+            bee.y += bee.vy * speedMult;
+
+            if (bee.x < 0 || bee.x > canvas.width) bee.vx *= -1;
+            if (bee.y < 0 || bee.y > canvas.height) bee.vy *= -1;
+
+            bee.angle = Math.atan2(bee.vy, bee.vx);
+        });
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = '#228B22';
+        ctx.fillRect(0, canvas.height - 50, canvas.width, 50);
+
+        bees.forEach(bee => drawBee(bee, beeColor));
+
+        angerBar.style.width = angerLevel + '%';
+        
+        if (angerLevel < 30) statusText.innerText = "Пчёлки довольны 😊";
+        else if (angerLevel < 70) statusText.innerText = "Пчёлки нервничают 😟";
+        else statusText.innerText = "ОПАСНОСТЬ! ЛОВИ КНОПКУ! 😡";
+
+        requestAnimationFrame(updateGame);
+    }
+
+    // --- СТАРТ ---
+    startBtn.addEventListener('click', () => {
+        startScreen.style.display = 'none';
+        gameActive = true;
+        lastTime = performance.now();
+        
+        // Инициализация звука
+        setupRealMusic();
+        initAudioContext(); // Разблокируем AudioContext для iOS/Safari
+        
+        // Пробуем играть реальную музыку
+        playRealMusic();
+        
+        initBees();
+        spawnRespectButton();
+        requestAnimationFrame(updateGame);
+    });
+
+    // Слушатели событий
+    btnRespect.addEventListener('mousedown', handleRespectClick);
+    btnRespect.addEventListener('touchstart', handleRespectClick);
+    
+    btnDisrespect.addEventListener('click', handleDisrespectClick);
+    btnDisrespect.addEventListener('touchstart', (e) => { e.preventDefault(); handleDisrespectClick(); });
+
+</script>
+</body>
+</html>
